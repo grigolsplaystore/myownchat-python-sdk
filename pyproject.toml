@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myownchat"
+version = "0.1.0"
+description = "MyOwnChat AI Agent Messaging Gateway & SDK"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "MyOwnChat Team", email = "support@marcvali.org" }
+]
+keywords = ["myownchat", "ai-agent", "hermes-agent", "gateway", "sse", "littlebackend", "chat-bot"]
+dependencies = [
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+myownchat-gateway = "myownchat.cli:main"
+
+[project.urls]
+Homepage = "https://myownchat.app"
+Repository = "https://github.com/myownchat/myownchat"
