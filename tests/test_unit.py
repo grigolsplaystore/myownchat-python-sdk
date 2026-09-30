@@ -87,3 +87,51 @@ def test_build_persona_prompt():
     assert "SupportBot" in prompt
     assert "gpt-4o" in prompt
     assert "#support" in prompt
+
+
+def test_build_chat_context():
+    from myownchat.cli import build_chat_context
+
+    sys_prompt = "You are a helpful assistant."
+
+    # 1. Single user turn
+    history = [{"role": "user", "content": "Tell me about yourself"}]
+    ctx = build_chat_context(sys_prompt, history, max_turns=10)
+    assert len(ctx) == 2
+    assert ctx[0] == {"role": "system", "content": sys_prompt}
+    assert ctx[1] == {"role": "user", "content": "Tell me about yourself"}
+
+    # 2. Leading assistant turn from slice is dropped
+    history_with_leading_assistant = [
+        {"role": "assistant", "content": "Earlier bot reply"},
+        {"role": "user", "content": "New question"},
+    ]
+    ctx2 = build_chat_context(sys_prompt, history_with_leading_assistant, max_turns=10)
+    assert len(ctx2) == 2
+    assert ctx2[0]["role"] == "system"
+    assert ctx2[1] == {"role": "user", "content": "New question"}
+
+    # 3. Empty strings / whitespace filtered out
+    history_with_empty = [
+        {"role": "user", "content": "   "},
+        {"role": "assistant", "content": ""},
+        {"role": "user", "content": "Valid query"},
+    ]
+    ctx3 = build_chat_context(sys_prompt, history_with_empty, max_turns=10)
+    assert len(ctx3) == 2
+    assert ctx3[1] == {"role": "user", "content": "Valid query"}
+
+    # 4. Truncation respects max_turns and ensures user starts
+    long_history = [
+        {"role": "user", "content": "1"},
+        {"role": "assistant", "content": "2"},
+        {"role": "user", "content": "3"},
+        {"role": "assistant", "content": "4"},
+        {"role": "user", "content": "5"},
+    ]
+    ctx4 = build_chat_context(sys_prompt, long_history, max_turns=3)
+    assert len(ctx4) == 4  # 1 system + user(3) + assistant(4) + user(5)
+    assert ctx4[0]["role"] == "system"
+    assert ctx4[1] == {"role": "user", "content": "3"}
+    assert ctx4[2] == {"role": "assistant", "content": "4"}
+    assert ctx4[3] == {"role": "user", "content": "5"}

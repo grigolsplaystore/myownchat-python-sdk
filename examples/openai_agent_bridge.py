@@ -40,7 +40,7 @@ except ImportError:
     sys.exit(1)
 
 from myownchat import Message, MyOwnChatGateway
-from myownchat.cli import build_persona_prompt
+from myownchat.cli import build_chat_context, build_persona_prompt
 
 # Configuration
 MYOWNCHAT_KEY = os.getenv("MYOWNCHAT_API_KEY")
@@ -75,9 +75,7 @@ effective_system_prompt = build_persona_prompt(
     channel_name=channel_info.name if channel_info else None,
     custom_prompt=SYSTEM_PROMPT,
 )
-conversation_history: list[dict[str, str]] = [
-    {"role": "system", "content": effective_system_prompt}
-]
+dialogue_history: list[dict[str, str]] = []
 
 # Reconstruct initial conversation context from MyOwnChat channel messages
 try:
@@ -85,26 +83,33 @@ try:
     for m in recent_messages:
         if m.is_from_app or m.metadata.get("is_app"):
             if m.text and m.text.strip():
-                conversation_history.append({"role": "assistant", "content": m.text.strip()})
+                dialogue_history.append({"role": "assistant", "content": m.text.strip()})
         elif not m.is_from_webhook and m.type != "system" and m.text and m.text.strip():
-            conversation_history.append({"role": "user", "content": m.text.strip()})
-    if len(conversation_history) > 1:
-        print(f"✓ Reconstructed {len(conversation_history) - 1} messages from App Channel context.")
+            dialogue_history.append({"role": "user", "content": m.text.strip()})
+    if dialogue_history:
+        print(f"✓ Reconstructed {len(dialogue_history)} messages from App Channel context.")
 except Exception as err:
     print(f"⚠️ Could not reconstruct channel history: {err}")
 
 
 @gateway.on_message
 def on_user_message(msg: Message, gw: MyOwnChatGateway):
-    print(f"\n💬 [Incoming User Message #{msg.id}]: {msg.text}")
-    conversation_history.append({"role": "user", "content": msg.text})
+    text = (msg.text or "").strip()
+    if not text:
+        return
+
+    print(f"\n💬 [Incoming User Message #{msg.id}]: {text}")
+    dialogue_history.append({"role": "user", "content": text})
 
     # Post initial thinking indicator
     status_msg = gw.send("💭 *Thinking...*", reply_to=msg)
 
     try:
-        # Context window: system prompt + last N turns
-        context = [conversation_history[0]] + conversation_history[-MAX_HISTORY:]
+        context = build_chat_context(
+            system_prompt=effective_system_prompt,
+            dialogue_history=dialogue_history,
+            max_turns=MAX_HISTORY,
+        )
 
         stream = ai_client.chat.completions.create(
             model=OPENAI_MODEL,
@@ -141,7 +146,7 @@ def on_user_message(msg: Message, gw: MyOwnChatGateway):
             gw.edit(status_msg, final_reply)
         except Exception:
             gw.send(final_reply, reply_to=msg)
-        conversation_history.append({"role": "assistant", "content": final_reply})
+        dialogue_history.append({"role": "assistant", "content": final_reply})
         print(f"⚡ [AI Response]: {final_reply[:80]}...")
 
     except Exception as err:

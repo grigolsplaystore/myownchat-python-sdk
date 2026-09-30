@@ -38,6 +38,40 @@ def build_persona_prompt(
     )
 
 
+def build_chat_context(
+    system_prompt: str,
+    dialogue_history: list[dict[str, str]],
+    max_turns: int = 10,
+) -> list[dict[str, str]]:
+    """
+    Constructs a sanitized, compliant OpenAI chat messages list.
+    Guarantees:
+    - Single system message at index 0.
+    - Clean dialogue turns with non-empty text.
+    - Starts with a 'user' turn (drops orphan leading assistant turns).
+    - Prevents duplicate consecutive system prompts.
+    """
+    turns: list[dict[str, str]] = []
+    for turn in dialogue_history:
+        role = turn.get("role")
+        content = (turn.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            turns.append({"role": role, "content": content})
+
+    if max_turns > 0 and len(turns) > max_turns:
+        turns = turns[-max_turns:]
+
+    # Drop leading assistant turns so conversation starts with a user query
+    while turns and turns[0]["role"] != "user":
+        turns.pop(0)
+
+    messages: list[dict[str, str]] = []
+    if system_prompt and system_prompt.strip():
+        messages.append({"role": "system", "content": system_prompt.strip()})
+    messages.extend(turns)
+    return messages
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="MyOwnChat AI Agent Gateway — Universal OpenAI-Compatible messaging bridge"
@@ -192,7 +226,7 @@ def main():
             channel_name=channel_info.name if channel_info else None,
             custom_prompt=args.openai_system_prompt,
         )
-        conversation_history: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+        dialogue_history: list[dict[str, str]] = []
 
         # Reconstruct initial conversation context from MyOwnChat channel messages
         try:
@@ -200,15 +234,13 @@ def main():
             for m in recent_messages:
                 if m.is_from_app or m.metadata.get("is_app"):
                     if m.text and m.text.strip():
-                        conversation_history.append(
-                            {"role": "assistant", "content": m.text.strip()}
-                        )
+                        dialogue_history.append({"role": "assistant", "content": m.text.strip()})
                 elif not m.is_from_webhook and m.type != "system" and m.text and m.text.strip():
-                    conversation_history.append({"role": "user", "content": m.text.strip()})
-            if len(conversation_history) > 1:
+                    dialogue_history.append({"role": "user", "content": m.text.strip()})
+            if dialogue_history:
                 logger.info(
                     "Reconstructed %d history messages from App Channel context.",
-                    len(conversation_history) - 1,
+                    len(dialogue_history),
                 )
         except Exception as err:
             logger.warning("Could not reconstruct initial channel history: %s", err)
@@ -222,21 +254,26 @@ def main():
 
         @gateway.on_message
         def handle_openai(msg: Message, gw: MyOwnChatGateway):
-            print(f"\n💬 [Incoming message #{msg.id}]: {msg.text}")
-            conversation_history.append({"role": "user", "content": msg.text})
+            text = (msg.text or "").strip()
+            if not text:
+                return
+
+            print(f"\n💬 [Incoming message #{msg.id}]: {text}")
+            dialogue_history.append({"role": "user", "content": text})
 
             # Send initial thinking indicator to user
             status_msg = gw.send("💭 *Thinking...*", reply_to=msg)
 
             try:
-                # Truncate context to system prompt + last N turns
-                context = [conversation_history[0]] + conversation_history[
-                    -(args.openai_max_history) :
-                ]
+                context = build_chat_context(
+                    system_prompt=system_prompt,
+                    dialogue_history=dialogue_history,
+                    max_turns=args.openai_max_history,
+                )
 
                 stream = openai_client.chat.completions.create(
                     model=args.openai_model,
-                    messages=context,
+                    messages=context,  # type: ignore[arg-type]
                     temperature=args.openai_temperature,
                     stream=True,
                 )
@@ -272,7 +309,7 @@ def main():
                     gw.edit(status_msg, final_reply)
                 except Exception:
                     gw.send(final_reply, reply_to=msg)
-                conversation_history.append({"role": "assistant", "content": final_reply})
+                dialogue_history.append({"role": "assistant", "content": final_reply})
                 print(f"⚡ [LLM Response]: {final_reply[:80]}...")
 
             except Exception as err:
