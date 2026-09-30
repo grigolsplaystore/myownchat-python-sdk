@@ -141,8 +141,8 @@ def main():
     parser.add_argument(
         "--openai-max-history",
         type=int,
-        help="Maximum number of conversation turns to retain in context. Defaults to OPENAI_MAX_HISTORY or 10.",
-        default=int(os.getenv("OPENAI_MAX_HISTORY", "10")),
+        help="Maximum number of conversation turns to retain in context. Defaults to OPENAI_MAX_HISTORY or 30.",
+        default=int(os.getenv("OPENAI_MAX_HISTORY", "30")),
     )
     parser.add_argument(
         "--openai-temperature",

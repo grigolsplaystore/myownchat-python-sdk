@@ -225,7 +225,7 @@ client.post_message(
 | `OPENAI_API_KEY` | API Key (or dummy for local LLMs) | `not-needed` |
 | `OPENAI_MODEL` | Model identifier | `gpt-4o-mini` |
 | `OPENAI_SYSTEM_PROMPT` | System prompt instruction | Friendly AI prompt |
-| `OPENAI_MAX_HISTORY` | Max conversation turns retained | `10` |
+| `OPENAI_MAX_HISTORY` | Max conversation turns retained | `30` |
 | `HERMES_API_KEY` | Nous / OpenRouter API Key for Hermes | `None` |
 
 ---

@@ -89,7 +89,7 @@ The SDK communicates with LittleBackend using the standard `Message` data model:
   - `--openai-api-key`: API key or dummy for local LLMs.
   - `--openai-model`: Model identifier.
   - `--openai-system-prompt`: System prompt.
-  - `--openai-max-history`: Max context turns (default 10).
+  - `--openai-max-history`: Max context turns (default 30).
   - `--openai-temperature`: Sampling temperature.
 
 ---
@@ -97,7 +97,7 @@ The SDK communicates with LittleBackend using the standard `Message` data model:
 ## Verification & Code Quality Suite
 - **Linter & Formatter**: `.venv/bin/ruff format . && .venv/bin/ruff check .` (0 errors, strict code formatting).
 - **Type Checker**: `.venv/bin/mypy myownchat tests examples` (0 errors across all 11 source files).
-- **Full Test Suite**: `.venv/bin/pytest` (6/6 tests passing).
+- **Full Test Suite**: `.venv/bin/pytest` (7/7 tests passing).
 - **Gateway Integration Test**: `PYTHONPATH=. python3 tests/test_gateway.py` (Tests auto-scoped client, threaded replies, edit_message interface, gateway loop prevention, user message dispatch).
 - **Live Real-Time SSE Stream Test**: `PYTHONPATH=. python3 tests/test_live_sse.py` (Verifies real-time event delivery and automatic callback reply over live SSE stream).
 
@@ -113,5 +113,5 @@ The SDK communicates with LittleBackend using the standard `Message` data model:
 | `OPENAI_API_KEY` | API Key (or dummy for local LLMs) | `not-needed` |
 | `OPENAI_MODEL` | Model identifier | `gpt-4o-mini` |
 | `OPENAI_SYSTEM_PROMPT` | System prompt instruction | Default friendly prompt |
-| `OPENAI_MAX_HISTORY` | Max conversation turns retained | `10` |
+| `OPENAI_MAX_HISTORY` | Max conversation turns retained | `30` |
 | `HERMES_API_KEY` | Nous / OpenRouter API Key for Hermes Agent | `None` |

@@ -51,7 +51,7 @@ SYSTEM_PROMPT = os.getenv(
     "OPENAI_SYSTEM_PROMPT",
     "You are a helpful, friendly AI assistant chatting inside MyOwnChat.",
 )
-MAX_HISTORY = int(os.getenv("OPENAI_MAX_HISTORY", "10"))
+MAX_HISTORY = int(os.getenv("OPENAI_MAX_HISTORY", "30"))
 
 if not MYOWNCHAT_KEY:
     print("❌ Error: MYOWNCHAT_API_KEY is required.", file=sys.stderr)
