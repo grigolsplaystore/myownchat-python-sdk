@@ -8,9 +8,6 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-import os
-import signal
-import sys
 import time
 from typing import Any, Callable, Optional, Union
 
@@ -30,7 +27,7 @@ class MyOwnChatGateway:
         api_key: Optional[str] = None,
         api_base: Optional[str] = None,
         bot_name: Optional[str] = None,
-        on_message: Optional[Callable[[Message, MyOwnChatGateway], Union[str, None]]] = None,
+        on_message: Optional[Callable[..., Any]] = None,
         ignore_self: bool = True,
         ignore_webhooks: bool = True,
         ignore_system: bool = True,
@@ -41,7 +38,7 @@ class MyOwnChatGateway:
             bot_name=bot_name,
         )
         self.bot_name = self.client.bot_name
-        self.on_message_handler = on_message
+        self.on_message_handler: Optional[Callable[..., Any]] = on_message
         self.ignore_self = ignore_self
         self.ignore_webhooks = ignore_webhooks
         self.ignore_system = ignore_system
@@ -76,6 +73,22 @@ class MyOwnChatGateway:
             reply_to_id=reply_to_id,
             metadata=metadata,
             bot_name=self.bot_name,
+        )
+
+    def edit(
+        self,
+        message_or_id: Union[int, Message],
+        text: str,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> Message:
+        """
+        Updates/edits an existing message previously posted by this app.
+        """
+        msg_id = message_or_id.id if isinstance(message_or_id, Message) else message_or_id
+        return self.client.edit_message(
+            message_id=msg_id,
+            text=text,
+            metadata=metadata,
         )
 
     def _init_cursor(self) -> None:
@@ -124,27 +137,20 @@ class MyOwnChatGateway:
             return
 
         try:
-            # Handle both async and sync callbacks
-            sig = inspect.signature(self.on_message_handler)
-            param_count = len(sig.parameters)
+            handler = self.on_message_handler
+            sig = inspect.signature(handler)
+            args = (msg,) if len(sig.parameters) == 1 else (msg, self)
+            result = handler(*args)
+            if inspect.isawaitable(result):
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(result)
 
-            result: Any = None
-            if inspect.iscoroutinefunction(self.on_message_handler):
-                loop = asyncio.get_event_loop()
-                if param_count == 1:
-                    result = loop.run_until_complete(self.on_message_handler(msg))
-                else:
-                    result = loop.run_until_complete(self.on_message_handler(msg, self))
-            else:
-                if param_count == 1:
-                    result = self.on_message_handler(msg)
-                else:
-                    result = self.on_message_handler(msg, self)
-
-            # If the handler returned a non-empty string, automatically post it as a reply
             if isinstance(result, str) and result.strip():
                 self.send(result.strip(), reply_to=msg)
-
         except Exception as err:
             logger.error("Error executing on_message handler: %s", err, exc_info=True)
 
@@ -170,7 +176,9 @@ class MyOwnChatGateway:
         print(f"  Channel:  #{self.channel_info.name if self.channel_info else 'app'}")
         print(f"  Endpoint: {self.client.api_base}")
         print("=" * 60)
-        print(f"[{time.strftime('%X')}] Listening for incoming user messages (Press Ctrl+C to stop)...")
+        print(
+            f"[{time.strftime('%X')}] Listening for incoming user messages (Press Ctrl+C to stop)..."
+        )
 
         backoff = 1.0
         while self._running:
@@ -190,7 +198,10 @@ class MyOwnChatGateway:
                         continue
 
                     if event_type == "LB_CONNECT":
-                        logger.debug("SSE Handshake connected. Client ID: %s", data.get("clientId") or data.get("client_id"))
+                        logger.debug(
+                            "SSE Handshake connected. Client ID: %s",
+                            data.get("clientId") or data.get("client_id"),
+                        )
                         continue
 
                     # Check for table insert / mutation events
@@ -201,12 +212,21 @@ class MyOwnChatGateway:
                     is_msg_event = (
                         event_type.startswith("messages/")
                         or table == "messages"
-                        or (isinstance(record, dict) and ("channel_id" in record or "text" in record or "sender_app_id" in record))
+                        or (
+                            isinstance(record, dict)
+                            and (
+                                "channel_id" in record
+                                or "text" in record
+                                or "sender_app_id" in record
+                            )
+                        )
                     )
 
                     if is_msg_event and isinstance(record, dict):
                         # Only handle creation/inserts, ignore deletes
-                        if action not in ("delete", "destroy") and not event_type.endswith("/delete"):
+                        if action not in ("delete", "destroy") and not event_type.endswith(
+                            "/delete"
+                        ):
                             msg = Message.from_dict(record)
                             if msg.id > self.last_message_id:
                                 self._dispatch_message(msg)
@@ -217,7 +237,9 @@ class MyOwnChatGateway:
             except Exception as err:
                 if not self._running:
                     break
-                logger.warning("SSE connection dropped (%s). Reconnecting in %.1fs...", err, backoff)
+                logger.warning(
+                    "SSE connection dropped (%s). Reconnecting in %.1fs...", err, backoff
+                )
                 time.sleep(backoff)
                 backoff = min(backoff * 2.0, 15.0)
 

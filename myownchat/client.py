@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Generator
 from dataclasses import dataclass, field
-from typing import Any, Generator, Optional
+from typing import Any, Optional
+
 import requests
 
 DEFAULT_API_BASE = "https://api.marcvali.org/myownchat"
@@ -16,6 +18,7 @@ DEFAULT_API_BASE = "https://api.marcvali.org/myownchat"
 @dataclass
 class Message:
     """Represents a chat message in MyOwnChat."""
+
     id: int
     channel_id: int
     sender_user_id: Optional[int] = None
@@ -37,14 +40,12 @@ class Message:
             except Exception:
                 meta = {}
 
-        raw_user_id = data.get("sender_user_id")
-        raw_app_id = data.get("sender_app_id")
-
+        uid, aid = data.get("sender_user_id"), data.get("sender_app_id")
         return cls(
             id=int(data.get("id", 0)),
             channel_id=int(data.get("channel_id", 0)),
-            sender_user_id=int(raw_user_id) if raw_user_id is not None else None,
-            sender_app_id=int(raw_app_id) if raw_app_id is not None else None,
+            sender_user_id=int(uid) if uid is not None else None,
+            sender_app_id=int(aid) if aid is not None else None,
             text=str(data.get("text") or data.get("content") or ""),
             type=str(data.get("type", "text")),
             metadata=meta if isinstance(meta, dict) else {},
@@ -57,7 +58,11 @@ class Message:
     @property
     def is_from_app(self) -> bool:
         """Returns True if the message was posted by an AI bot or App."""
-        return bool(self.sender_app_id is not None or self.metadata.get("is_app") or self.metadata.get("bot_name"))
+        return bool(
+            self.sender_app_id is not None
+            or self.metadata.get("is_app")
+            or self.metadata.get("bot_name")
+        )
 
     @property
     def is_from_webhook(self) -> bool:
@@ -79,6 +84,7 @@ class Message:
 @dataclass
 class ChannelInfo:
     """Represents App channel information."""
+
     id: int
     name: str
     type: str
@@ -96,15 +102,12 @@ class ChannelInfo:
             except Exception:
                 st = {}
 
-        raw_mems = data.get("members", 1)
-        members_count = len(raw_mems) if isinstance(raw_mems, list) else int(raw_mems or 1)
-
         return cls(
             id=int(data.get("id", 0)),
             name=str(data.get("name", "")),
             type=str(data.get("type", "app")),
             is_open=bool(data.get("is_open", False)),
-            members=members_count,
+            members=int(data.get("members", 1)),
             settings=st if isinstance(st, dict) else {},
             created_at=data.get("created_at"),
         )
@@ -131,20 +134,20 @@ class MyOwnChatClient:
                 "or pass api_key to MyOwnChatClient."
             )
 
-        self.api_base = (
-            api_base
-            or os.getenv("MYOWNCHAT_API_BASE")
-            or DEFAULT_API_BASE
-        ).rstrip("/")
+        self.api_base = (api_base or os.getenv("MYOWNCHAT_API_BASE") or DEFAULT_API_BASE).rstrip(
+            "/"
+        )
 
         self.bot_name = bot_name or os.getenv("MYOWNCHAT_BOT_NAME", "AI Assistant")
         self.timeout = timeout
         self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": f"MyOwnChat-PythonSDK/0.1.0 ({self.bot_name})",
-        })
+        self._session.headers.update(
+            {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": f"MyOwnChat-PythonSDK/0.1.0 ({self.bot_name})",
+            }
+        )
 
     def get_channel(self) -> Optional[ChannelInfo]:
         """Fetches the bound App channel metadata."""
@@ -204,7 +207,7 @@ class MyOwnChatClient:
         if metadata:
             meta.update(metadata)
 
-        payload = {
+        payload: dict[str, Any] = {
             "type": "text",
             "text": text.strip(),
             "metadata": meta,
@@ -212,6 +215,31 @@ class MyOwnChatClient:
 
         url = f"{self.api_base}/api/table/messages"
         resp = self._session.post(url, json=payload, timeout=self.timeout)
+        resp.raise_for_status()
+
+        res_data = resp.json()
+        return Message.from_dict(res_data)
+
+    def edit_message(
+        self,
+        message_id: int,
+        text: str,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> Message:
+        """
+        Updates/edits an existing message previously posted by this app.
+        """
+        if not text or not text.strip():
+            raise ValueError("Message text cannot be empty")
+
+        payload: dict[str, Any] = {
+            "text": text.strip(),
+        }
+        if metadata is not None:
+            payload["metadata"] = metadata
+
+        url = f"{self.api_base}/api/table/messages/{message_id}"
+        resp = self._session.patch(url, json=payload, timeout=self.timeout)
         resp.raise_for_status()
 
         res_data = resp.json()
@@ -240,17 +268,22 @@ class MyOwnChatClient:
             "Cache-Control": "no-cache",
         }
 
-        with self._session.get(url, params=params, headers=headers, stream=True, timeout=(10, None)) as r:
+        with self._session.get(
+            url, params=params, headers=headers, stream=True, timeout=(10, None)
+        ) as r:
             r.raise_for_status()
             event_name = "message"
             data_buffer: list[str] = []
 
-            for line in r.iter_lines(decode_unicode=True):
-                if line is None:
+            for raw_line in r.iter_lines(decode_unicode=True):
+                if raw_line is None:
                     continue
 
-                line = line.strip()
-                if not line:
+                line_str: str = (
+                    raw_line.decode("utf-8") if isinstance(raw_line, bytes) else str(raw_line)
+                ).strip()
+
+                if not line_str:
                     # Empty line triggers event dispatch
                     if data_buffer:
                         raw_data = "\n".join(data_buffer)
@@ -267,10 +300,12 @@ class MyOwnChatClient:
                     event_name = "message"
                     continue
 
-                if line.startswith("event:"):
-                    event_name = line[6:].strip()
-                elif line.startswith("data:"):
-                    data_buffer.append(line[5:].strip())
-                elif line.startswith(":"):
-                    # SSE comment / keepalive ping
+                if line_str.startswith(":"):
                     continue
+
+                field, _, val = line_str.partition(":")
+                val = val.strip()
+                if field == "event":
+                    event_name = val
+                elif field == "data":
+                    data_buffer.append(val)

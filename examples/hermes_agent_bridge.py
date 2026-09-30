@@ -21,17 +21,20 @@ How it works:
 
 import os
 import sys
-from myownchat import MyOwnChatGateway, Message
+
+from myownchat import Message, MyOwnChatGateway
 
 # Configuration
 MYOWNCHAT_KEY = os.getenv("MYOWNCHAT_API_KEY")
 HERMES_API_BASE = os.getenv("HERMES_API_BASE", "https://api.nousresearch.com/v1")
-HERMES_API_KEY = os.getenv("HERMES_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+HERMES_API_KEY = (
+    os.getenv("HERMES_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+)
 HERMES_MODEL = os.getenv("HERMES_MODEL", "NousResearch/Hermes-3-Llama-3.1-8B")
 
 if not MYOWNCHAT_KEY:
     print("❌ Error: MYOWNCHAT_API_KEY is required.")
-    print("Usage: export MYOWNCHAT_API_KEY=\"lb_live_...\" && python hermes_agent_bridge.py")
+    print('Usage: export MYOWNCHAT_API_KEY="lb_live_..." && python hermes_agent_bridge.py')
     sys.exit(1)
 
 # Initialize MyOwnChat Gateway
@@ -51,6 +54,7 @@ conversation_history: list[dict[str, str]] = [
         ),
     }
 ]
+
 
 @gateway.on_message
 def on_user_message(msg: Message, gw: MyOwnChatGateway):

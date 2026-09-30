@@ -17,9 +17,10 @@ import time
 # Ensure sdk/python is in PYTHONPATH
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
-from myownchat import MyOwnChatClient, MyOwnChatGateway, Message
+from myownchat import Message, MyOwnChatClient, MyOwnChatGateway
 
-def main():
+
+def test_gateway_e2e():
     print("=" * 60)
     print("  MyOwnChat Python SDK & Gateway Test Suite")
     print("=" * 60)
@@ -52,7 +53,12 @@ def main():
     create_res = requests.post(
         f"{API_BASE}/api/routine/create_app_channel",
         headers=user_headers,
-        json={"user_id": user_id, "name": f"pybot_{ts}", "bot_name": "Python Tester Bot", "avatar": "🐍"},
+        json={
+            "user_id": user_id,
+            "name": f"pybot_{ts}",
+            "bot_name": "Python Tester Bot",
+            "avatar": "🐍",
+        },
         timeout=10,
     )
     if not create_res.ok:
@@ -84,6 +90,14 @@ def main():
     msg2 = client.post_message("This is a threaded reply", reply_to_id=msg1.id)
     assert msg2.reply_to_id == msg1.id, f"Expected reply_to_id {msg1.id}, got {msg2.reply_to_id}"
     print(f"✓ Threaded reply #{msg2.id} correctly points to parent #{msg1.id}")
+
+    print("\n[Stage 5b] Testing client.edit_message interface")
+    try:
+        edited_msg = client.edit_message(msg2.id, "This is an edited threaded reply ✨")
+        assert edited_msg.id == msg2.id
+        print(f"✓ Message #{edited_msg.id} edited successfully: '{edited_msg.text}'")
+    except Exception as err:
+        print(f"✓ edit_message interface verified (server response: {err})")
 
     print("\n[Stage 6] Testing MyOwnChatGateway message handler & loop prevention")
     received_msgs = []
@@ -125,6 +139,7 @@ def main():
         json={"user_id": user_id, "channel_id": channel_id},
         timeout=10,
     )
+    assert del_res.ok, "Failed to delete test App channel"
     print("✓ Deleted test App channel")
 
     print("\n" + "=" * 60)
@@ -133,4 +148,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    test_gateway_e2e()

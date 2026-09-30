@@ -7,13 +7,15 @@ import os
 import sys
 import threading
 import time
+
 import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
-from myownchat import MyOwnChatGateway, Message
+from myownchat import Message, MyOwnChatGateway
 
-def main():
+
+def test_live_sse():
     print("=" * 60)
     print("  Testing Live SSE Streaming in MyOwnChatGateway")
     print("=" * 60)
@@ -100,4 +102,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    test_live_sse()
