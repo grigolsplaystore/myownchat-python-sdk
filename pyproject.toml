@@ -29,7 +29,7 @@ myownchat-gateway = "myownchat.cli:main"
 
 [project.urls]
 Homepage = "https://myownchat.app"
-Repository = "https://github.com/myownchat/myownchat"
+Repository = "https://github.com/grigolsplaystore/myownchat-python-sdk"
 
 [tool.ruff]
 line-length = 100
