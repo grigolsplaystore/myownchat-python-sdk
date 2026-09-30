@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from .client import ChannelInfo, Message, MyOwnChatClient
     from .gateway import MyOwnChatGateway
 
-__version__ = "0.1.0"
+__version__ = "0.1.8"
 __all__ = [
     "MyOwnChatClient",
     "MyOwnChatGateway",
